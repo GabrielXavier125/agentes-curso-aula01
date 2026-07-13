@@ -10,6 +10,8 @@ from app.graph import graph, approval_graph
 from app.metrics import record_event, get_metrics
 from app.mas import team_graph
 
+from app.evals import run_evals, agente_do_projeto
+
 langfuse_handler = CallbackHandler()
 app = FastAPI(title="Agente de IA — Aula 5")
 
@@ -103,3 +105,9 @@ def team(req: TeamRequest):
     config = {"configurable": {"thread_id": req.thread_id}, "callbacks": [langfuse_handler]}
     result = team_graph.invoke(state, config=config)
     return {"resposta": result["resposta"], "etapas": [m.content for m in result["messages"]]}
+
+
+@app.get("/evals")
+def evals():
+    """Roda o harness de avaliação contra o agente e devolve a nota."""
+    return run_evals(agente_do_projeto)
