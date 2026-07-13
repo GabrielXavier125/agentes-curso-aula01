@@ -12,6 +12,8 @@ from app.mas import team_graph
 
 from app.evals import run_evals, agente_do_projeto
 
+from app.governance import guardrail_entrada, guardrail_saida, audit_log
+
 langfuse_handler = CallbackHandler()
 app = FastAPI(title="Agente de IA — Aula 5")
 
@@ -111,3 +113,27 @@ def team(req: TeamRequest):
 def evals():
     """Roda o harness de avaliação contra o agente e devolve a nota."""
     return run_evals(agente_do_projeto)
+
+
+@app.post("/chat")
+def chat(req: ChatRequest):
+    # 1) Guardrail de ENTRADA — barra o proibido antes de gastar uma chamada.
+    permitido, motivo = guardrail_entrada(req.message)
+    if not permitido:
+        audit_log({"thread_id": req.thread_id, "acao": "chat",
+                   "permitido": False, "motivo": motivo})
+        return {"status": "bloqueado", "answer": "Não posso ajudar com esse pedido."}
+
+    # 2) O agente age (igual à Aula 9).
+    state = {"messages": [{"role": "user", "content": req.message}],
+             "pending_action": None, "approved": None}
+    result = graph.invoke(state, config=_config(req.thread_id))
+    resposta = result["messages"][-1].content
+
+    # 3) Guardrail de SAÍDA — sanitiza antes de devolver.
+    resposta = guardrail_saida(resposta)
+
+    # 4) Auditoria do que foi permitido e concluído.
+    record_event("tarefas_concluidas")
+    audit_log({"thread_id": req.thread_id, "acao": "chat", "permitido": True})
+    return {"status": "concluido", "answer": resposta}
