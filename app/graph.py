@@ -24,13 +24,25 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     pending_action: Optional[str]   # a ação crítica proposta, aguardando decisão
     approved: Optional[bool]        # a decisão humana, preenchida na retomada
+    product: Optional[str]          # contexto do produto (Aula 1), layerado no prompt
 
 
 model = build_model()
 
 
 def model_node(state: AgentState) -> dict:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + state["messages"]
+    # O contexto do produto (Aula 1) é LAYERADO sobre o system prompt — nunca o
+    # substitui, senão o agente perde as instruções das tools e das skills e o
+    # RAG deixa de ser usado. Ele entra DEPOIS, como enquadramento do domínio.
+    system = SYSTEM_PROMPT
+    produto = state.get("product")
+    if produto:
+        system = (
+            SYSTEM_PROMPT
+            + "\n\n--- Contexto do produto (definido pelo usuário) ---\n"
+            + produto
+        )
+    messages = [{"role": "system", "content": system}] + state["messages"]
     return {"messages": [model.invoke(messages)]}
 
 
